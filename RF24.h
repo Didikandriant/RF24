@@ -1969,7 +1969,42 @@ private:
      * @return Nothing. Older versions of this function returned the status
      * byte, but that it now saved to a private member on all SPI transactions.
      */
-    void write_payload(const void* buf, uint8_t len, const uint8_t writeType);
+    /****************************************************************************/
+void RF24::startConstCarrier(rf24_pa_dbm_e level, uint8_t channel)
+{
+    stopListening();
+    write_register(RF_SETUP, read_register(RF_SETUP) | _BV(CONT_WAVE) | _BV(PLL_LOCK));
+    if (isPVariant()) {
+        setAutoAck(0);
+        setRetries(0, 0);
+        uint8_t dummy_buf[5];
+        for (uint8_t i = 0; i < 5; ++i)
+            dummy_buf[i] = 0x00;
+
+        // use write_register() instead of openWritingPipe() to bypass
+        // truncation of the address with the current RF24::addr_width value
+        write_register(TX_ADDR, reinterpret_cast<uint8_t*>(&dummy_buf), 5);
+        flush_tx(); // so we can write to top level
+
+        // use write_register() instead of write_payload() to bypass
+        // truncation of the payload with the current RF24::payload_size value
+        write_register(W_TX_PAYLOAD, reinterpret_cast<const uint8_t*>(&dummy_buf), 5);
+
+        disableCRC();
+    }
+    setPALevel(level);
+    setChannel(channel);
+    IF_SERIAL_DEBUG(printf_P(PSTR("RF_SETUP=%02x\r\n"), read_register(RF_SETUP)));
+    ce(HIGH);
+    if (isPVariant()) {
+        delay(1); // datasheet says 1 ms is ok in this instance
+        ce(LOW);
+        reUseTX();
+    }
+}
+
+/****************************************************************************/
+
 
     /**
      * Read the receive payload
